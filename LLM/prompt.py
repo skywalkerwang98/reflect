@@ -1,37 +1,31 @@
+from openai import OpenAI
 import os
 import time
-import openai
 import json
 import datetime
-import numpy as np
 
 class LLMPrompter():
-    def __init__(self, gpt_version, api_key) -> None:
+    def __init__(self, gpt_version, api_key, base_url) -> None:
         self.gpt_version = gpt_version
         if api_key is None:
             raise ValueError("OpenAI API key is not provided.")
-        else:
-            openai.api_key = api_key
+        
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url if base_url else "https://api.openai.com/v1"
+        )
 
     def query(self, prompt: str, sampling_params: dict, save: bool, save_dir: str) -> str:
         while True:
             try:
-                if 'gpt-4' in self.gpt_version:
-                    response = openai.ChatCompletion.create(
-                        model=self.gpt_version,
-                        messages=[
-                                {"role": "system", "content": prompt['system']},
-                                {"role": "user", "content": prompt['user']},
-                            ],
-                        **sampling_params
-                        )
-                    # print("response: ", response)
-                else:
-                    response = openai.Completion.create(
-                        model=self.gpt_version,
-                        prompt=prompt,
-                        **sampling_params
-                    )
+                response = self.client.chat.completions.create(
+                    model=self.gpt_version,
+                    messages=[
+                        {"role": "system", "content": prompt['system']},
+                        {"role": "user", "content": prompt['user']},
+                    ],
+                    **sampling_params
+                )
             except Exception as e:
                 print("Request failed, sleep 2 secs and try again...", e)
                 time.sleep(2)
@@ -48,25 +42,14 @@ class LLMPrompter():
                     output = prev_response
 
             with open(os.path.join(save_dir, 'response.json'), 'w') as f:
-                if 'gpt-4' in self.gpt_version:
-                    output[key] = {
-                                'prompt': prompt,
-                                'sampling_params': sampling_params,
-                                'response': response['choices'][0]['message']["content"].strip()
-                            }
-                else:
-                    output[key] = {
-                                'prompt': prompt,
-                                'sampling_params': sampling_params,
-                                'response': response['choices'][0]['text'].strip(),
-                                'logprob': np.mean(response['choices'][0]['logprobs']['token_logprobs'])
-                            }
+                output[key] = {
+                    'prompt': prompt,
+                    'sampling_params': sampling_params,
+                    'response': response.choices[0].message.content.strip()
+                }
                 json.dump(output, f, indent=4)
-            
-        if 'gpt-4' in self.gpt_version:
-            return response['choices'][0]['message']["content"].strip(), None
-        else:
-            return response['choices'][0]['text'].strip(), np.mean(response['choices'][0]['logprobs']['token_logprobs'])
+        
+        return response.choices[0].message.content.strip(), None
 
     def make_key(self):
         return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")

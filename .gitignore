@@ -4,3 +4,5 @@ LLM/__pycache__
 main/thor_tasks
 main/state_summary
 main/recovery
+# Environment Variables
+.env
